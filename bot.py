@@ -1,46 +1,42 @@
 from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes, CommandHandler
+from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
 
-TOKEN = "8664751437:AAEtWJrma9e46KhoNTbbZNKg5GSaYvOgKxI"
-ADMIN_ID = 6414433469
+BOT_TOKEN = "8664751437:AAEtWJrma9e46KhoNTbbZNKg5GSaYvOgKxI"
+ADMIN_ID = 6414433469  # তোমার Telegram ID
 
-user_messages = {}
+# User message handle
+async def user_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.chat_id
+    text = update.message.text
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("আপনি বটে যুক্ত হয়েছেন ✅")
+    # Save last user
+    context.user_data["last_user"] = user_id
 
-async def handle_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    msg = update.message
-
-    # Send message to admin with user id
-    sent = await context.bot.send_message(
+    # Send to admin
+    await context.bot.send_message(
         chat_id=ADMIN_ID,
-        text=f"👤 User ID: {user.id}\n💬 Message: {msg.text}"
+        text=f"👤 User ID: {user_id}\n💬 Message: {text}"
     )
 
-    user_messages[sent.message_id] = user.id
+# Admin reply handle
+async def admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.chat_id == ADMIN_ID:
+        if update.message.reply_to_message:
+            text = update.message.text
 
-async def handle_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        return
+            # Extract user ID from replied message
+            msg = update.message.reply_to_message.text
+            user_id = int(msg.split("\n")[0].replace("👤 User ID: ", ""))
 
-    if update.message.reply_to_message:
-        reply_id = update.message.reply_to_message.message_id
-
-        if reply_id in user_messages:
-            user_id = user_messages[reply_id]
-
+            # Send reply to user
             await context.bot.send_message(
                 chat_id=user_id,
-                text=update.message.text
+                text=f"📩 Admin Reply:\n{text}"
             )
 
-app = ApplicationBuilder().token(TOKEN).build()
+app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-app.add_handler(CommandHandler("start", start))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_user))
-app.add_handler(MessageHandler(filters.REPLY & filters.TEXT, handle_admin_reply))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, user_message))
+app.add_handler(MessageHandler(filters.TEXT & filters.REPLY, admin_reply))
 
-print("Bot Running...")
 app.run_polling()
