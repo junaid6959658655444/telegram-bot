@@ -1,42 +1,105 @@
-from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
+const TelegramBot = require('node-telegram-bot-api');
+const fs = require('fs');
 
-BOT_TOKEN = "8664751437:AAEtWJrma9e46KhoNTbbZNKg5GSaYvOgKxI"
-ADMIN_ID = 6414433469  # তোমার Telegram ID
+const token = "8693735939:AAFlQiKOCCvwJaylnhqC_MYvWyW2S0dwx64";
+const ADMIN_ID = 6414433469; // আপনার ID
 
-# User message handle
-async def user_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.chat_id
-    text = update.message.text
+const bot = new TelegramBot(token, { polling: true });
 
-    # Save last user
-    context.user_data["last_user"] = user_id
+// ডাটাবেস ফাইল
+let users = [];
 
-    # Send to admin
-    await context.bot.send_message(
-        chat_id=ADMIN_ID,
-        text=f"👤 User ID: {user_id}\n💬 Message: {text}"
-    )
+if (fs.existsSync('users.json')) {
+  users = JSON.parse(fs.readFileSync('users.json'));
+}
 
-# Admin reply handle
-async def admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.chat_id == ADMIN_ID:
-        if update.message.reply_to_message:
-            text = update.message.text
+// Save function
+function saveUsers() {
+  fs.writeFileSync('users.json', JSON.stringify(users, null, 2));
+}
 
-            # Extract user ID from replied message
-            msg = update.message.reply_to_message.text
-            user_id = int(msg.split("\n")[0].replace("👤 User ID: ", ""))
+// Start command
+bot.onText(/\/start/, (msg) => {
+  const id = msg.chat.id;
 
-            # Send reply to user
-            await context.bot.send_message(
-                chat_id=user_id,
-                text=f"📩 Admin Reply:\n{text}"
-            )
+  if (!users.includes(id)) {
+    users.push(id);
+    saveUsers();
+  }
 
-app = ApplicationBuilder().token(BOT_TOKEN).build()
+  bot.sendMessage(id, "👋 Welcome to Telecom Support\nআপনার সমস্যা লিখুন...");
+});
 
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, user_message))
-app.add_handler(MessageHandler(filters.TEXT & filters.REPLY, admin_reply))
+// User Message → Admin
+bot.on('message', (msg) => {
 
-app.run_polling()
+  if (msg.chat.id !== ADMIN_ID) {
+
+    bot.forwardMessage(ADMIN_ID, msg.chat.id, msg.message_id);
+
+    bot.sendMessage(msg.chat.id, "✅ আপনার মেসেজ পাঠানো হয়েছে, অপেক্ষা করুন।");
+
+  }
+});
+
+// Admin Reply → User
+bot.on('reply_to_message', (msg) => {
+
+  if (msg.chat.id === ADMIN_ID) {
+
+    if (!msg.reply_to_message.forward_from) return;
+
+    const userId = msg.reply_to_message.forward_from.id;
+
+    bot.sendMessage(userId, "📩 Support Reply:\n" + msg.text);
+  }
+});
+
+// 📢 Broadcast
+bot.onText(/\/broadcast (.+)/, (msg, match) => {
+
+  if (msg.chat.id !== ADMIN_ID) return;
+
+  const text = match[1];
+
+  users.forEach(id => {
+    bot.sendMessage(id, "📢 " + text).catch(() => {});
+  });
+
+  bot.sendMessage(ADMIN_ID, "✅ Broadcast Sent");
+});
+
+// 🚫 Ban
+let banned = [];
+
+bot.onText(/\/ban (\d+)/, (msg, match) => {
+
+  if (msg.chat.id !== ADMIN_ID) return;
+
+  const userId = parseInt(match[1]);
+
+  if (!banned.includes(userId)) {
+    banned.push(userId);
+  }
+
+  bot.sendMessage(ADMIN_ID, "🚫 User Banned");
+});
+
+// ✅ Unban
+bot.onText(/\/unban (\d+)/, (msg, match) => {
+
+  if (msg.chat.id !== ADMIN_ID) return;
+
+  const userId = parseInt(match[1]);
+
+  banned = banned.filter(id => id !== userId);
+
+  bot.sendMessage(ADMIN_ID, "✅ User Unbanned");
+});
+
+// Block banned users
+bot.on('message', (msg) => {
+
+  if (banned.includes(msg.chat.id)) return;
+
+});
